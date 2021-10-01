@@ -1,1 +1,1 @@
-CUDA_VISIBLE_DEVICES=5 python main.py --exp_name temp --gan-path model/gan/GS_WGAN_epsinf/netGS.pth --cnn-path model/cnn/epsinf/model.pt --pos_data_dir raw_cifar/train/ --neg_data_dir raw_cifar/test/
+CUDA_VISIBLE_DEVICES=0 python main.py --exp_name temp_2 --gan-path model/gan/GS_WGAN_epsinf/netGS.pth --cnn-path model/cnn/epsinf/model.pt --pos_data_dir raw_cifar/train/ --neg_data_dir raw_cifar/test/

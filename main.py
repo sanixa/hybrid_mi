@@ -7,7 +7,7 @@ import torch
 from torch.autograd import Variable
 import random
 
-import model
+import model, log
 
 ### import tools
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'tools'))
@@ -17,8 +17,8 @@ import lpips_pytorch as ps
 from LBFGS_pytorch import FullBatchLBFGS
 
 ### Hyperparameters
-LAMBDA2 = 0.2
-LAMBDA3 = 0.001
+LAMBDA2 = 0.02
+LAMBDA3 = 0.01
 LBFGS_LR = 0.015
 
 #############################################################################################################
@@ -239,8 +239,13 @@ def main():
     args = parser.parse_args()
     Z_DIM = 100
 
+
     ### save dir
     save_dir = os.path.join('result', args.exp_name)
+    os.makedirs(save_dir, exist_ok=True)
+    logger = log.get_logger(os.path.join(save_dir, 'exp.log'))
+    logger.info('LAMBDA2, LAMBDA3, LBFGS_LR: {}, {}, {}'.format(LAMBDA2, LAMBDA3, LBFGS_LR))
+    logger.info('args: {}'.format(args))
 
     ### set up Generator
     if not os.path.isfile(args.gan_path):
@@ -263,6 +268,7 @@ def main():
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
+    logger.info('random seed: {}'.format(seed))
 
     ### define loss
     loss_model = Loss(args, netG, netC, args.distance, if_norm_reg=False, z_dim=Z_DIM)
@@ -273,10 +279,10 @@ def main():
     init_val = np.tile(init_val_np, (args.data_num, 1)).astype(np.float32)
     init_val_pos = init_val
     init_val_neg = init_val
-
+    '''
     ### positive ###
     pos_data_paths = get_filepaths_from_dir(args.pos_data_dir, ext='png')[: args.data_num]
-    pos_query_imgs = np.array([read_image(f) for f in pos_data_paths])
+    pos_query_imgs = np.array([read_image(f, resolution=args.resolution) for f in pos_data_paths])
     query_loss, query_z, query_xhat = optimize_z_lbfgs(args,
                                                        loss_model,
                                                        init_val_pos,
@@ -285,10 +291,10 @@ def main():
                                                        args.maxfunc)
     print(query_loss)
     save_files(save_dir, ['pos_loss'], [query_loss])
-
+    '''
     ### negative ###
     neg_data_paths = get_filepaths_from_dir(args.neg_data_dir, ext='png')[: args.data_num]
-    neg_query_imgs = np.array([read_image(f) for f in neg_data_paths])
+    neg_query_imgs = np.array([read_image(f, resolution=args.resolution) for f in neg_data_paths])
     query_loss, query_z, query_xhat = optimize_z_lbfgs(args,
                                                        loss_model,
                                                        init_val_neg,

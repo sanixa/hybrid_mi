@@ -75,7 +75,7 @@ def get_filepaths_from_dir(data_dir, ext):
     return sorted(path_list)
 
 
-def read_image(filepath, resolution=64, cx=89, cy=121):
+def read_image(filepath, resolution=64):
     '''
     read,crop and scale an image given the path
     :param filepath:  the path of the image file
@@ -87,7 +87,7 @@ def read_image(filepath, resolution=64, cx=89, cy=121):
     '''
 
     img = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)
-    shape = img.shape
+    img = cv2.resize(img, (resolution, resolution), interpolation=cv2.INTER_AREA)
 
     return img / 255.0
 
