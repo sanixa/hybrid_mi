@@ -115,6 +115,7 @@ def visualize_gt(imgs, save_dir):
     plt.figure(1)
     num_imgs = len(imgs)
     imgs = np.clip(imgs, 0., 1.)
+    imgs = np.transpose(imgs, [0, 2, 3, 1])
     NROWS = int(np.ceil(float(num_imgs) / float(NCOLS)))
     for i in range(num_imgs):
         plt.subplot(NROWS, NCOLS, i + 1)

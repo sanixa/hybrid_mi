@@ -16,6 +16,9 @@ from utils import *
 import lpips_pytorch as ps
 from LBFGS_pytorch import FullBatchLBFGS
 
+import torchvision.transforms as transforms
+from torchvision.datasets import CIFAR10, MNIST
+
 ### Hyperparameters
 LAMBDA2 = 0.02
 LAMBDA3 = 0.01
@@ -42,7 +45,6 @@ class Loss(torch.nn.Module):
         self.netG = netG
         self.netC = netC
         self.args = args
-        self.label = torch.cuda.LongTensor(np.tile(np.arange(10), 2)).cuda()
         self.lpips_model = ps.PerceptualLoss()
 
         ### loss
@@ -74,7 +76,7 @@ class Loss(torch.nn.Module):
             self.loss_lpips_fn = lambda x, y: self.lpips_model.forward(x, y, normalize=False).view(-1)
             self.loss_l2_fn = lambda x, y: torch.mean((y - x) ** 2, dim=[1, 2, 3])
         '''
-    def forward(self, z, x_gt):
+    def forward(self, z, x_gt, y_gt):
         '''
         self.x_hat = self.netG(z, self.label)
         self.x_hat = torch.cat((self.x_hat, self.x_hat, self.x_hat), 1)
@@ -96,12 +98,13 @@ class Loss(torch.nn.Module):
 
         return self.vec_loss
         '''
-        
-        batchsize = self.label.size()[0]
+
+        batchsize = x_gt.size()[0]
+        self.label = torch.cuda.LongTensor(y_gt).cuda()
         self.gen_img = self.netG(z, self.label).view(batchsize, 1, self.args.resolution, self.args.resolution)
         gen_img_ch3 = torch.cat((self.gen_img, self.gen_img, self.gen_img), 1)
         gen_img_ch3 = torch.clamp(gen_img_ch3, min=0.0, max=1.0)
-        x_gt = torch.unsqueeze(x_gt, 1)
+
         x_gt_ch3 = torch.cat((x_gt, x_gt, x_gt), 1)
         x_gt_ch3 = torch.clamp(x_gt_ch3, min=0.0, max=1.0)
 
@@ -121,6 +124,7 @@ def optimize_z_lbfgs(args,
                      loss_model,
                      init_val,
                      query_imgs,
+                     query_target,
                      save_dir,
                      max_func):
     ### store results
@@ -136,6 +140,7 @@ def optimize_z_lbfgs(args,
 
         try:
             x_batch = query_imgs[i * BATCH_SIZE:(i + 1) * BATCH_SIZE]
+            y_batch = query_target[i * BATCH_SIZE:(i + 1) * BATCH_SIZE]
             x_gt = torch.from_numpy(x_batch).cuda()
 
             if os.path.exists(save_dir_batch) and False:
@@ -156,14 +161,14 @@ def optimize_z_lbfgs(args,
 
                 def closure():
                     optimizer.zero_grad()
-                    vec_loss = loss_model.forward(z_model.forward(), x_gt)
+                    vec_loss = loss_model.forward(z_model.forward(), x_gt, y_batch)
                     vec_loss_np = vec_loss.detach().cpu().numpy()
                     loss_progress.append(vec_loss_np)
                     final_loss = torch.mean(vec_loss)
                     return final_loss
 
                 for step in range(max_func):
-                    loss_model.forward(z_model.forward(), x_gt)
+                    loss_model.forward(z_model.forward(), x_gt, y_batch)
                     final_loss = closure()
                     final_loss.backward()
 
@@ -236,9 +241,26 @@ def main():
                         help='the directory for the positive (training) query images set')
     parser.add_argument('--neg_data_dir', '-negdir', type=str,
                         help='the directory for the negative (testing) query images set')
+    parser.add_argument('--dataset_name', type=str, default='cifar', choices=['mnist', 'cifar'],
+                        help='dataset name')
+    parser.add_argument('--LAMBDA2', '-l2', type=float, default=None, 
+                        help='LAMBDA2 value for tuning')
+    parser.add_argument('--LAMBDA3', '-l3', type=float, default=None, 
+                        help='LAMBDA3 value for tuning')
+    parser.add_argument('--LBFGS_LR', '-lr', type=float, default=None, 
+                        help='LBFGS_LR value for tuning')
     args = parser.parse_args()
     Z_DIM = 100
 
+    global LAMBDA2
+    if args.LAMBDA2 != None:
+        LAMBDA2 = args.LAMBDA2
+    global LAMBDA3
+    if args.LAMBDA3 != None:
+        LAMBDA3 = args.LAMBDA3
+    global LBFGS_LR
+    if args.LBFGS_LR != None:
+        LBFGS_LR = args.LBFGS_LR
 
     ### save dir
     save_dir = os.path.join('result', args.exp_name)
@@ -279,26 +301,54 @@ def main():
     init_val = np.tile(init_val_np, (args.data_num, 1)).astype(np.float32)
     init_val_pos = init_val
     init_val_neg = init_val
-    '''
+
+    if args.dataset_name == 'mnist':
+        transform = transforms.ToTensor()
+        train_set = MNIST(root="./data/MNIST", download=True, train=True, transform=transform)
+        test_set = MNIST(root="./data/MNIST", download=True, train=False, transform=transform)
+    elif args.dataset_name == 'cifar':
+        transform = transforms.Compose([
+                        transforms.Grayscale(1),
+                        transforms.ToTensor()])
+
+        train_set = CIFAR10(root="./data/CIFAR10", download=True, train=True, transform=transform)
+        test_set = CIFAR10(root="./data/CIFAR10", download=True, train=False, transform=transform)
+
+
+    #indices = np.loadtxt('index_500_dcgan.txt', dtype=np.int_)
+    #train_set = torch.utils.data.Subset(train_set, indices)
+    train_loader = torch.utils.data.DataLoader(train_set, batch_size=100, shuffle=True)
+    train_data, train_target = next(iter(train_loader))
+
+    test_loader = torch.utils.data.DataLoader(test_set, batch_size=100, shuffle=True)
+    test_data, test_target = next(iter(test_loader))
+
     ### positive ###
-    pos_data_paths = get_filepaths_from_dir(args.pos_data_dir, ext='png')[: args.data_num]
-    pos_query_imgs = np.array([read_image(f, resolution=args.resolution) for f in pos_data_paths])
+    #pos_data_paths = get_filepaths_from_dir(args.pos_data_dir, ext='png')[: args.data_num]
+    #pos_query_imgs = np.array([read_image(f, resolution=args.resolution) for f in pos_data_paths])
+    pos_query_imgs = train_data.cpu().detach().numpy()
+    pos_query_target = train_target.cpu().detach().numpy()
+
     query_loss, query_z, query_xhat = optimize_z_lbfgs(args,
                                                        loss_model,
                                                        init_val_pos,
                                                        pos_query_imgs,
+                                                       pos_query_target,
                                                        check_folder(os.path.join(save_dir, 'pos_results')),
                                                        args.maxfunc)
-    print(query_loss)
     save_files(save_dir, ['pos_loss'], [query_loss])
-    '''
+    
     ### negative ###
-    neg_data_paths = get_filepaths_from_dir(args.neg_data_dir, ext='png')[: args.data_num]
-    neg_query_imgs = np.array([read_image(f, resolution=args.resolution) for f in neg_data_paths])
+    #neg_data_paths = get_filepaths_from_dir(args.neg_data_dir, ext='png')[: args.data_num]
+    #neg_query_imgs = np.array([read_image(f, resolution=args.resolution) for f in neg_data_paths])
+    neg_query_imgs = test_data.cpu().detach().numpy()
+    neg_query_target = test_target.cpu().detach().numpy()
+
     query_loss, query_z, query_xhat = optimize_z_lbfgs(args,
                                                        loss_model,
                                                        init_val_neg,
                                                        neg_query_imgs,
+                                                       neg_query_target,
                                                        check_folder(os.path.join(save_dir, 'neg_results')),
                                                        args.maxfunc)
     save_files(save_dir, ['neg_loss'], [query_loss])
