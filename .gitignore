@@ -1,2 +1,4 @@
-result/*
-raw_cifar/*
+result/
+raw_cifar/
+data/
+model/
