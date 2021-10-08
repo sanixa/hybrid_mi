@@ -20,7 +20,7 @@ import torchvision.transforms as transforms
 from torchvision.datasets import CIFAR10, MNIST
 
 ### Hyperparameters
-LAMBDA2 = 0.02
+LAMBDA2 = 0.2
 LAMBDA3 = 0.01
 LBFGS_LR = 0.015
 
@@ -114,9 +114,9 @@ class Loss(torch.nn.Module):
         self.loss_lpips = self.loss_lpips_fn(self.gen_img_ch3, x_gt_ch3)
         self.loss_l2 = self.loss_l2_fn(self.gen_img_ch3, x_gt_ch3)
 
-        loss_l2_confident_vector = torch.mean((self.netC(self.gen_img_ch3) - self.netC(x_gt_ch3)) ** 2, dim=[1])
+        #loss_l2_confident_vector = torch.mean((self.netC(self.gen_img_ch3) - self.netC(x_gt_ch3)) ** 2, dim=[1])
 
-        self.vec_loss = loss_l2_confident_vector# + LAMBDA2 * self.loss_lpips + LAMBDA3 * self.loss_l2
+        self.vec_loss = 0.2 * self.loss_lpips + self.loss_l2#LAMBDA2 * loss_l2_confident_vector + 0.2 * self.loss_lpips + self.loss_l2
 
         return self.vec_loss
 
@@ -267,7 +267,7 @@ def main():
     save_dir = os.path.join('result', args.exp_name)
     os.makedirs(save_dir, exist_ok=True)
     logger = log.get_logger(os.path.join(save_dir, 'exp.log'))
-    logger.info('LAMBDA2, LAMBDA3, LBFGS_LR: {}, {}, {}'.format(LAMBDA2, LAMBDA3, LBFGS_LR))
+    logger.info('LAMBDA2, LBFGS_LR: {}, {}'.format(LAMBDA2, LBFGS_LR))
     logger.info('args: {}'.format(args))
 
     ### set up Generator
@@ -356,3 +356,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
