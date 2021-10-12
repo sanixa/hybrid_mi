@@ -116,7 +116,7 @@ class Loss(torch.nn.Module):
 
         loss_l2_confident_vector = torch.mean((self.netC(self.gen_img_ch3) - self.netC(x_gt_ch3)) ** 2, dim=[1])
 
-        self.vec_loss = LAMBDA2 * loss_l2_confident_vector + 0.2 * self.loss_lpips + self.loss_l2
+        self.vec_loss = LAMBDA2 * loss_l2_confident_vector + LAMBDA3 * self.loss_lpips + self.loss_l2
 
         return self.vec_loss
 
@@ -265,7 +265,7 @@ def main():
     save_dir = os.path.join('result', args.exp_name)
     os.makedirs(save_dir, exist_ok=True)
     logger = log.get_logger(os.path.join(save_dir, 'exp.log'))
-    logger.info('LAMBDA2, LBFGS_LR: {}, {}'.format(LAMBDA2, LBFGS_LR))
+    logger.info('LAMBDA2, LAMBDA3, LBFGS_LR: {}, {}, {}'.format(LAMBDA2, LAMBDA3, LBFGS_LR))
     logger.info('args: {}'.format(args))
 
     ### set up Generator
@@ -318,10 +318,10 @@ def main():
     #indices = np.loadtxt('index_500_dcgan.txt', dtype=np.int_)
     #train_set = torch.utils.data.Subset(train_set, indices)
     workers = 2
-    train_loader = torch.utils.data.DataLoader(trainset, batch_size=100, shuffle=True, num_workers=workers)
+    train_loader = torch.utils.data.DataLoader(trainset, batch_size=args.data_num, shuffle=True, num_workers=workers)
     train_data, train_target = next(iter(train_loader))
 
-    test_loader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=True, num_workers=workers)
+    test_loader = torch.utils.data.DataLoader(testset, batch_size=args.data_num, shuffle=True, num_workers=workers)
     test_data, test_target = next(iter(test_loader))
 
     ### positive ###

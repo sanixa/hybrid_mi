@@ -318,10 +318,10 @@ def main():
 
     #indices = np.loadtxt('index_500_dcgan.txt', dtype=np.int_)
     #train_set = torch.utils.data.Subset(train_set, indices)
-    train_loader = torch.utils.data.DataLoader(train_set, batch_size=100, shuffle=True)
+    train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.data_num, shuffle=True)
     train_data, train_target = next(iter(train_loader))
 
-    test_loader = torch.utils.data.DataLoader(test_set, batch_size=100, shuffle=True)
+    test_loader = torch.utils.data.DataLoader(test_set, batch_size=args.data_num, shuffle=True)
     test_data, test_target = next(iter(test_loader))
 
     ### positive ###
@@ -356,4 +356,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
