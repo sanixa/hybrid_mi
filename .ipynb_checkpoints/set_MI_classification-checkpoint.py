@@ -6,9 +6,10 @@ import argparse
 from tqdm import tqdm
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 from torch.autograd import Variable
-import random
+import random, copy
 import re
 
 import model, log
@@ -18,8 +19,53 @@ from torchvision.datasets import CIFAR10, MNIST
 
 from datasets.celeba import CelebA
 
+from sklearn import metrics
+
 
 # -
+
+# definition of inference model 
+class Net(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim, hidden_layers=1):
+        super(Net, self).__init__()
+        self.layers = []
+        self.layers.append(nn.Linear(input_dim, hidden_dim))
+        self.layers.append(nn.Tanh())
+        for i in range(hidden_layers):
+            self.layers.append(nn.Linear(hidden_dim, hidden_dim))
+            self.layers.append(nn.Tanh())
+        self.layers.append(nn.Linear(hidden_dim, output_dim))
+
+
+        self.layers = nn.Sequential(*self.layers)
+
+    def forward(self, x):
+        logits = self.layers(x)
+        return torch.sigmoid(logits)
+
+
+def test_classifier(test_data, test_y, net, normalize=False):
+
+    if(normalize):
+        test_data = test_data / test_data.max(axis=0) # normalize each cloumn
+    test_data, test_y = torch.tensor(test_data, dtype=torch.float), torch.tensor(test_y, dtype=torch.float)
+    test_data, test_y = test_data.cuda(), test_y.cuda()
+    probs = net(test_data)
+    
+    ###AUCROC
+    auc = metrics.roc_auc_score(test_y.cpu().detach().numpy(), probs.cpu().detach().numpy())
+    
+    probs[probs>0.5] = 1
+    probs[probs<0.5] = 0
+    num_correct = torch.sum(probs==test_y)
+    accuracy = 1.0 * num_correct.item() / test_data.shape[0]
+    
+
+    half = int(test_data.shape[0]/2)
+    trn_accuracy = torch.sum(probs[0:half]==test_y[0:half]).item() *1.0 / half
+    test_accuracy = torch.sum(probs[half:]==test_y[half:]).item() *1.0 / half
+    return accuracy, trn_accuracy, test_accuracy, auc
+
 
 # train the inference model
 def train_classifier(trn_data, trn_y, test_data, test_y, hidden_dim=100, layers=3, T=1000, batchsize=200, lr=0.5, momentum=0., normalize=False):
@@ -32,7 +78,7 @@ def train_classifier(trn_data, trn_y, test_data, test_y, hidden_dim=100, layers=
     loss_func = F.binary_cross_entropy
     net = Net(trn_data.shape[1], hidden_dim, 1, layers).cuda()
     optimizer = torch.optim.SGD(net.parameters(), lr=lr, momentum=momentum, weight_decay=0.)
-    best_acc = -1
+    best_auc = -1
     eval_freq=5
 
     num_trn_samples = trn_data.shape[0]
@@ -45,13 +91,15 @@ def train_classifier(trn_data, trn_y, test_data, test_y, hidden_dim=100, layers=
         optimizer.step()
 
         if(t%eval_freq==0):
-            cur_acc, cur_trn_acc, cur_test_acc = test_classifier(test_data, test_y, net, normalize)
-            if(cur_acc > best_acc):
+            cur_acc, cur_trn_acc, cur_test_acc, cur_auc = test_classifier(test_data, test_y, net, normalize)
+            if(cur_auc > best_auc):
+                best_auc = cur_auc
                 best_acc = cur_acc
                 best_net = copy.deepcopy(net)
                 best_trn_acc = cur_trn_acc
                 best_test_acc = cur_test_acc
-    return best_net, best_acc, best_trn_acc, best_test_acc#best_net
+                print('curr best auc/acc:{}, {}'.format(best_auc, best_acc))
+    return best_net, best_auc, best_acc, best_trn_acc, best_test_acc#best_net
 
 
 def get_moments(arr, order=2):
@@ -99,10 +147,13 @@ def main():
     ])
 
     trainset = CelebA(root=os.path.join('/work/u5366584/exp/datasets/celeba'), split='train', #/work/u5366584/exp/datasets/celeba \\ ../intern/GS-WGAN-custom/exp/datasets/celeba
-        transform=transform_train, download=False, custom_subset=True)
+        transform=transform_train, download=False)
     testset = CelebA(root=os.path.join('/work/u5366584/exp/datasets/celeba'), split='test', #/work/u5366584/exp/datasets/celeba \\ ../intern/GS-WGAN-custom/exp/datasets/celeba
         transform=transform_train, download=False)
     
+    indices = np.loadtxt('index_20k.txt', dtype=np.int_)
+    trainset = torch.utils.data.Subset(trainset, indices)
+    print(len(trainset))
     workers = 2
     
     train_loader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=workers)
@@ -148,7 +199,6 @@ def main():
     test_attack_x = np.vstack(test_attack_x)
     test_attack_y = np.zeros(test_attack_x.shape[0]).reshape(-1,1) ##membership label 0
                 
-    import ipdb;ipdb.set_trace()
     #### follow  https://github.com/dayu11/MI_with_DA/blob/main/mi_attack.py#L89  ####Algorithm 4 from paper
     
     print('inference accuracy of moments feature')
@@ -157,7 +207,7 @@ def main():
     
     for order in range(1, 21):  # we use moments with orders 1~20
         trn_moments = get_moments(train_attack_x, order).reshape([-1, 1])
-        test_moments = get_moments(train_attack_y, order).reshape([-1, 1])
+        test_moments = get_moments(test_attack_x, order).reshape([-1, 1])
         trn_features.append(trn_moments)
         test_features.append(test_moments)
     trn_features = np.concatenate(trn_features, axis=1) # size:10000x20
@@ -170,8 +220,9 @@ def main():
     test_data = np.concatenate([trn_features[1000:], test_features[1000:]], axis=0)
     test_y = np.concatenate([train_attack_y[1000:], test_attack_y[1000:]], axis=0)
     
-    net, best_acc, best_trn_acc, best_test_acc = train_classifier(train_data, train_y, test_data, test_y, hidden_dim=20, layers=1)
+    net, best_auc, best_acc, best_trn_acc, best_test_acc = train_classifier(train_data, train_y, test_data, test_y, hidden_dim=20, layers=1)
     print(best_acc, 'accuracy on training/test set: ', best_trn_acc, best_test_acc)
+    print('AUCORC: ', best_auc)
 
 if __name__ == '__main__':
     main()
