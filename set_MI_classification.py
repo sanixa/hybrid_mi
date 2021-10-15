@@ -123,8 +123,21 @@ def main():
                         help='batch size (should not be too large for better optimization performance)')
     parser.add_argument('--cnn-path-dir', '-cdir', type=str, default=None,
                         help='file path of classifier')
+    parser.add_argument('--hidden-dim', '-dim', type=int, default=20,
+                        help='dim of hidden layer')
+    parser.add_argument('--layers', type=int, default=1,
+                        help='nums of hidden layer')
+    parser.add_argument('--lr', type=float, default=0.5,
+                        help='learning rate')
     args = parser.parse_args()
     
+    ### save dir
+    save_dir = os.path.join('result', 'set_classification', args.exp_name)
+    os.makedirs(save_dir, exist_ok=True)
+    logger = log.get_logger(os.path.join(save_dir, 'exp.log'))
+    logger.info('hidden-dim, layers, lr: {}, {}, {}'.format(args.hidden_dim, args.layers, args.lr))
+    logger.info('args: {}'.format(args))
+
     ### set up classifier
     if not os.path.isdir(args.cnn_path_dir):
         sys.exit("dir does not exist")
@@ -146,9 +159,9 @@ def main():
     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     ])
 
-    trainset = CelebA(root=os.path.join('/work/u5366584/exp/datasets/celeba'), split='train', #/work/u5366584/exp/datasets/celeba \\ ../intern/GS-WGAN-custom/exp/datasets/celeba
+    trainset = CelebA(root=os.path.join('../intern/GS-WGAN-custom/exp/datasets/celeba'), split='train', #/work/u5366584/exp/datasets/celeba \\ ../intern/GS-WGAN-custom/exp/datasets/celeba
         transform=transform_train, download=False)
-    testset = CelebA(root=os.path.join('/work/u5366584/exp/datasets/celeba'), split='test', #/work/u5366584/exp/datasets/celeba \\ ../intern/GS-WGAN-custom/exp/datasets/celeba
+    testset = CelebA(root=os.path.join('../intern/GS-WGAN-custom/exp/datasets/celeba'), split='test', #/work/u5366584/exp/datasets/celeba \\ ../intern/GS-WGAN-custom/exp/datasets/celeba
         transform=transform_train, download=False)
     
     indices = np.loadtxt('index_20k.txt', dtype=np.int_)
@@ -220,9 +233,10 @@ def main():
     test_data = np.concatenate([trn_features[1000:], test_features[1000:]], axis=0)
     test_y = np.concatenate([train_attack_y[1000:], test_attack_y[1000:]], axis=0)
     
-    net, best_auc, best_acc, best_trn_acc, best_test_acc = train_classifier(train_data, train_y, test_data, test_y, hidden_dim=20, layers=1)
+    net, best_auc, best_acc, best_trn_acc, best_test_acc = train_classifier(train_data, train_y, test_data, test_y, hidden_dim=args.hidden_dim, layers=args.layers, lr=args.lr)
     print(best_acc, 'accuracy on training/test set: ', best_trn_acc, best_test_acc)
     print('AUCORC: ', best_auc)
 
 if __name__ == '__main__':
     main()
+

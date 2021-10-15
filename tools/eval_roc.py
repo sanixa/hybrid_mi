@@ -76,9 +76,9 @@ def main():
     fpr, tpr, threshold, auc, ap, acc, tpr_thres, fpr_thres = plot_roc(-pos_loss, -neg_loss)
     plt.plot(fpr, tpr, label='%s attack, auc=%.3f, ap=%.3f' % (attack_type, auc, ap))
 
-    print("The accuracy value of %s attack is: %.3f " % (attack_type, acc))
-    print("The tpr_thres/fpr_thres value of %s attack is: %.3f and %.3f" % (attack_type, tpr_thres, fpr_thres))
-    print("The AUC ROC value of %s attack is: %.3f " % (attack_type, auc))
+    #print("The accuracy value of %s attack is: %.3f " % (attack_type, acc))
+    #print("The tpr_thres/fpr_thres value of %s attack is: %.3f and %.3f" % (attack_type, tpr_thres, fpr_thres))
+    #print("The AUC ROC value of %s attack is: %.3f " % (attack_type, auc))
 
     ################################################################
     # attack calibration
@@ -98,9 +98,11 @@ def main():
             pos_calibrate = pos_loss[:num_pos_samples] - pos_ref[:num_pos_samples, 0]
             neg_calibrate = neg_loss[:num_neg_samples] - neg_ref[:num_neg_samples, 0]
 
-        fpr, tpr, threshold, auc, ap = plot_roc(-pos_calibrate, -neg_calibrate)
+        fpr, tpr, threshold, auc, ap, acc, tpr_thres, fpr_thres = plot_roc(-pos_calibrate, -neg_calibrate)
         plt.plot(fpr, tpr, label='calibrated %s attack, auc=%.3f, ap=%.3f' % (attack_type, auc, ap))
         
+        #print("The accuracy value of calibrated %s attack is: %.3f " % (attack_type, acc))
+        #print("The tpr_thres/fpr_thres value of calibrated %s attack is: %.3f and %.3f" % (attack_type, tpr_thres, fpr_thres))
         print("The AUC ROC value of calibrated %s attack is: %.3f " % (attack_type, auc))
 
     plt.legend(loc='lower right')
