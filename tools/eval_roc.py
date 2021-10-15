@@ -15,7 +15,7 @@ def plot_roc(pos_results, neg_results):
     ##--------------
     acc_thres = np.sort(results)[int(len(results)/2)]
     pred_labels = [1 if x > acc_thres else 0 for x in results]
-    acc = metrics.accuracy_score(labels, pred_labels)
+    f1 = metrics.f1_score(labels, pred_labels)
     tn, fp, fn, tp = metrics.confusion_matrix(labels, pred_labels).ravel()
     tpr_thres = tp/ (tp+fn)
     fpr_thres = fp/ (fp+tn)
@@ -23,7 +23,7 @@ def plot_roc(pos_results, neg_results):
     fpr, tpr, threshold = metrics.roc_curve(labels, results, pos_label=1)
     auc = metrics.roc_auc_score(labels, results)
     ap = metrics.average_precision_score(labels, results)
-    return fpr, tpr, threshold, auc, ap, acc, tpr_thres, fpr_thres
+    return fpr, tpr, threshold, auc, ap, f1, tpr_thres, fpr_thres
 
 
 def plot_hist(pos_dist, neg_dist, save_file):
@@ -73,12 +73,12 @@ def main():
         neg_loss = np.load(result_load_dir+'/neg_loss.npy').flatten()
 
     ### plot roc curve
-    fpr, tpr, threshold, auc, ap, acc, tpr_thres, fpr_thres = plot_roc(-pos_loss, -neg_loss)
+    fpr, tpr, threshold, auc, ap, f1, tpr_thres, fpr_thres = plot_roc(-pos_loss, -neg_loss)
     plt.plot(fpr, tpr, label='%s attack, auc=%.3f, ap=%.3f' % (attack_type, auc, ap))
 
-    #print("The accuracy value of %s attack is: %.3f " % (attack_type, acc))
-    #print("The tpr_thres/fpr_thres value of %s attack is: %.3f and %.3f" % (attack_type, tpr_thres, fpr_thres))
-    #print("The AUC ROC value of %s attack is: %.3f " % (attack_type, auc))
+    print("The f1 score value of %s attack is: %.3f " % (attack_type, f1))
+    print("The tpr_thres/fpr_thres value of %s attack is: %.3f and %.3f" % (attack_type, tpr_thres, fpr_thres))
+    print("The AUC ROC value of %s attack is: %.3f " % (attack_type, auc))
 
     ################################################################
     # attack calibration
@@ -98,11 +98,11 @@ def main():
             pos_calibrate = pos_loss[:num_pos_samples] - pos_ref[:num_pos_samples, 0]
             neg_calibrate = neg_loss[:num_neg_samples] - neg_ref[:num_neg_samples, 0]
 
-        fpr, tpr, threshold, auc, ap, acc, tpr_thres, fpr_thres = plot_roc(-pos_calibrate, -neg_calibrate)
+        fpr, tpr, threshold, auc, ap, f1, tpr_thres, fpr_thres = plot_roc(-pos_calibrate, -neg_calibrate)
         plt.plot(fpr, tpr, label='calibrated %s attack, auc=%.3f, ap=%.3f' % (attack_type, auc, ap))
         
-        #print("The accuracy value of calibrated %s attack is: %.3f " % (attack_type, acc))
-        #print("The tpr_thres/fpr_thres value of calibrated %s attack is: %.3f and %.3f" % (attack_type, tpr_thres, fpr_thres))
+        print("The f1 score value of calibrated %s attack is: %.3f " % (attack_type, f1))
+        print("The tpr_thres/fpr_thres value of calibrated %s attack is: %.3f and %.3f" % (attack_type, tpr_thres, fpr_thres))
         print("The AUC ROC value of calibrated %s attack is: %.3f " % (attack_type, auc))
 
     plt.legend(loc='lower right')
@@ -117,3 +117,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
