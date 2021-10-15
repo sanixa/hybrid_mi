@@ -52,19 +52,23 @@ def test_classifier(test_data, test_y, net, normalize=False):
     test_data, test_y = test_data.cuda(), test_y.cuda()
     probs = net(test_data)
     
-    ###AUCROC
-    auc = metrics.roc_auc_score(test_y.cpu().detach().numpy(), probs.cpu().detach().numpy())
+    ###each metric
+    import ipdb;ipdb.set_trace()
+    label = test_y.cpu().detach().numpy()
+    pred_value = probs.cpu().detach().numpy()
+    pred_labels = [1 if x > probs_thres else 0 for x in pred_value]
     
-    probs[probs>0.5] = 1
-    probs[probs<0.5] = 0
-    num_correct = torch.sum(probs==test_y)
-    accuracy = 1.0 * num_correct.item() / test_data.shape[0]
+    acc = metrics.accuracy_score(label, pred_labels)
+    prec = metrics.precision_score(label, pred_labels)
+    recall = metrics.recall_score(label, pred_labels)
+    f1 = metrics.f1_score(label, pred_labels)
+    b_acc = metrics.balanced_accuracy_score(label, pred_labels)
+    tn, fp, fn, tp = metrics.confusion_matrix(label, pred_labels).ravel()
+    tpr_thres = tp/ (tp+fn)
+    fpr_thres = fp/ (fp+tn)
+    auc = metrics.roc_auc_score(label, pred_value)
     
-
-    half = int(test_data.shape[0]/2)
-    trn_accuracy = torch.sum(probs[0:half]==test_y[0:half]).item() *1.0 / half
-    test_accuracy = torch.sum(probs[half:]==test_y[half:]).item() *1.0 / half
-    return accuracy, trn_accuracy, test_accuracy, auc
+    return auc, acc, prec, recall, f1, b_acc, tpr_thres, fpr_thres
 
 
 # train the inference model
@@ -91,15 +95,20 @@ def train_classifier(trn_data, trn_y, test_data, test_y, hidden_dim=100, layers=
         optimizer.step()
 
         if(t%eval_freq==0):
-            cur_acc, cur_trn_acc, cur_test_acc, cur_auc = test_classifier(test_data, test_y, net, normalize)
+            cur_auc, cur_acc, cur_prec, cur_recall, cur_f1, cur_b_acc, cur_tpr_thres, cur_fpr_thres  = test_classifier(test_data, test_y, net, normalize)
             if(cur_auc > best_auc):
-                best_auc = cur_auc
-                best_acc = cur_acc
                 best_net = copy.deepcopy(net)
-                best_trn_acc = cur_trn_acc
-                best_test_acc = cur_test_acc
+                best_auc = cur_auc
+                
+                best_acc = cur_acc
+                best_prec = cur_prec
+                best_recall = cur_recall
+                best_f1 = cur_f1
+                best_b_acc = cur_b_acc
+                best_tpr_thres = cur_tpr_thres
+                best_fpr_thres = cur_fpr_thres
                 print('curr best auc/acc:{}, {}'.format(best_auc, best_acc))
-    return best_net, best_auc, best_acc, best_trn_acc, best_test_acc#best_net
+    return best_net, best_auc, best_acc, best_prec, best_recall, best_f1, best_b_acc, best_tpr_thres, best_fpr_thres
 
 
 def get_moments(arr, order=2):
@@ -159,9 +168,9 @@ def main():
     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     ])
 
-    trainset = CelebA(root=os.path.join('../intern/GS-WGAN-custom/exp/datasets/celeba'), split='train', #/work/u5366584/exp/datasets/celeba \\ ../intern/GS-WGAN-custom/exp/datasets/celeba
+    trainset = CelebA(root=os.path.join('/work/u5366584/exp/datasets/celeba'), split='train', #/work/u5366584/exp/datasets/celeba \\ ../intern/GS-WGAN-custom/exp/datasets/celeba
         transform=transform_train, download=False)
-    testset = CelebA(root=os.path.join('../intern/GS-WGAN-custom/exp/datasets/celeba'), split='test', #/work/u5366584/exp/datasets/celeba \\ ../intern/GS-WGAN-custom/exp/datasets/celeba
+    testset = CelebA(root=os.path.join('/work/u5366584/exp/datasets/celeba'), split='test', #/work/u5366584/exp/datasets/celeba \\ ../intern/GS-WGAN-custom/exp/datasets/celeba
         transform=transform_train, download=False)
     
     indices = np.loadtxt('index_20k.txt', dtype=np.int_)
@@ -233,9 +242,8 @@ def main():
     test_data = np.concatenate([trn_features[1000:], test_features[1000:]], axis=0)
     test_y = np.concatenate([train_attack_y[1000:], test_attack_y[1000:]], axis=0)
     
-    net, best_auc, best_acc, best_trn_acc, best_test_acc = train_classifier(train_data, train_y, test_data, test_y, hidden_dim=args.hidden_dim, layers=args.layers, lr=args.lr)
-    print(best_acc, 'accuracy on training/test set: ', best_trn_acc, best_test_acc)
-    print('AUCORC: ', best_auc)
+    nbest_net, best_auc, best_acc, best_prec, best_recall, best_f1, best_b_acc, best_tpr_thres, best_fpr_thres = train_classifier(train_data, train_y, test_data, test_y, hidden_dim=args.hidden_dim, layers=args.layers, lr=args.lr)
+    logger.info('best_auc, best_acc, best_prec, best_recall, best_f1, best_b_acc, best_tpr_thres, best_fpr_thres: {}, {}, {}, {}, {}, {}, {}, {}'.format(best_auc, best_acc, best_prec, best_recall, best_f1, best_b_acc, best_tpr_thres, best_fpr_thres))
 
 if __name__ == '__main__':
     main()
